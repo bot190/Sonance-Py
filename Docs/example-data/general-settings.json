@@ -1,0 +1,18 @@
+{
+    "ip-address": "xxx.xxx.x.xx",
+    "ip-subnet-mask": "255.255.255.0",
+    "dhcp-switch": "off",
+    "flash-power-switch": "off",
+    "power": "off",
+    "standby-mode": "off",
+    "auto-on-method": "audio",
+    "auto-on-delay": "0",
+    "amplifier-name": "Amplifier 1",
+    "dealer-name": "",
+    "amplifier-model": "DSP8-130",
+    "installer-name": "",
+    "customer-name": "",
+    "installition-date": "",
+    "firmware-version": "V2.61",
+    "serial-number": "930941631HA0133"
+}

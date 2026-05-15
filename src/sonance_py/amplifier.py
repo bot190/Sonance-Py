@@ -6,6 +6,9 @@ from typing import Any, Self
 
 import aiohttp
 
+from ._wire_models import WireEqSettings, WireGeneralSettings, WireInOutSettings
+from .models import EqSettings, GeneralSettings, InOutSettings
+
 JsonObject = dict[str, Any]
 
 
@@ -46,22 +49,23 @@ class SonanceDSP:
             await self._session.close()
         self._session = None
 
-    async def read_general(self) -> JsonObject:
+    async def read_general(self) -> GeneralSettings:
         """Read the general settings state."""
 
-        return await self._request(
+        data = await self._request(
             {
                 "page": "general-settings",
                 "action": "read",
             }
         )
+        return WireGeneralSettings.model_validate(data).to_model()
 
     async def write_general(
         self, name: str, value: str | int | float | bool
-    ) -> JsonObject:
+    ) -> GeneralSettings:
         """Write a general setting and return the refreshed state."""
 
-        return await self._request(
+        data = await self._request(
             {
                 "page": "general-settings",
                 "action": "write",
@@ -69,26 +73,28 @@ class SonanceDSP:
                 "value": self._format_value(value),
             }
         )
+        return WireGeneralSettings.model_validate(data).to_model()
 
-    async def read_in_out(self) -> JsonObject:
+    async def read_in_out(self) -> InOutSettings:
         """Read the input/output settings state."""
 
-        return await self._request(
+        data = await self._request(
             {
                 "page": "in-out-settings",
                 "action": "read",
             }
         )
+        return WireInOutSettings.model_validate(data).to_model()
 
     async def write_in_out(
         self,
         name: str,
         index: int,
         value: str | int | float | bool,
-    ) -> JsonObject:
+    ) -> InOutSettings:
         """Write an indexed input/output setting and return the refreshed state."""
 
-        return await self._request(
+        data = await self._request(
             {
                 "page": "in-out-settings",
                 "action": "write",
@@ -97,17 +103,19 @@ class SonanceDSP:
                 "value": self._format_value(value),
             }
         )
+        return WireInOutSettings.model_validate(data).to_model()
 
-    async def read_eq(self, preset: int = 0) -> JsonObject:
+    async def read_eq(self, preset: int = 0) -> EqSettings:
         """Read an EQ preset state."""
 
-        return await self._request(
+        data = await self._request(
             {
                 "page": "eq-settings",
                 "action": "read",
                 "eq-preset": preset,
             }
         )
+        return WireEqSettings.model_validate(data).to_model()
 
     async def write_eq(
         self,
@@ -115,10 +123,10 @@ class SonanceDSP:
         value: str | int | float | bool,
         *,
         preset: int = 0,
-    ) -> JsonObject:
+    ) -> EqSettings:
         """Write an EQ preset-level setting and return the refreshed state."""
 
-        return await self._request(
+        data = await self._request(
             {
                 "page": "eq-settings",
                 "action": "write",
@@ -127,6 +135,7 @@ class SonanceDSP:
                 "value": self._format_value(value),
             }
         )
+        return WireEqSettings.model_validate(data).to_model()
 
     async def write_eq_indexed(
         self,
@@ -136,7 +145,7 @@ class SonanceDSP:
         *,
         preset: int = 0,
         extra_params: Mapping[str, str | int | float | bool] | None = None,
-    ) -> JsonObject:
+    ) -> EqSettings:
         """Write an indexed EQ setting and return the refreshed state."""
 
         params: dict[str, str | int | float] = {
@@ -155,17 +164,18 @@ class SonanceDSP:
                 }
             )
 
-        return await self._request(params)
+        data = await self._request(params)
+        return WireEqSettings.model_validate(data).to_model()
 
     async def write_eq_in_out(
         self,
         name: str,
         index: int,
         value: str | int | float | bool,
-    ) -> JsonObject:
+    ) -> EqSettings:
         """Write an in/out setting through the EQ page API."""
 
-        return await self._request(
+        data = await self._request(
             {
                 "page": "eq-settings",
                 "action": "write",
@@ -174,6 +184,7 @@ class SonanceDSP:
                 "value": self._format_value(value),
             }
         )
+        return WireEqSettings.model_validate(data).to_model()
 
     async def do_eq(
         self,
@@ -181,10 +192,10 @@ class SonanceDSP:
         value: str | int | float | bool,
         *,
         preset: int = 0,
-    ) -> JsonObject:
+    ) -> EqSettings:
         """Execute an EQ action and return the refreshed state."""
 
-        return await self._request(
+        data = await self._request(
             {
                 "page": "eq-settings",
                 "action": "do",
@@ -193,6 +204,7 @@ class SonanceDSP:
                 "value": self._format_value(value),
             }
         )
+        return WireEqSettings.model_validate(data).to_model()
 
     async def _request(self, params: Mapping[str, str | int | float]) -> JsonObject:
         session = await self._get_session()

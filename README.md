@@ -45,7 +45,7 @@ from sonance_py import SonanceDSP
 async def main() -> None:
     async with SonanceDSP("192.168.1.50") as amp:
         general = await amp.read_general()
-        print(general["amplifier-model"])
+        print(general.amplifier_model)
 
 
 asyncio.run(main())

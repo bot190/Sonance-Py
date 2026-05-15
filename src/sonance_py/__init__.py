@@ -1,5 +1,47 @@
 """Async client for Sonance DSP amplifiers."""
 
 from .amplifier import SonanceDSP
+from .models import (
+    AutoOnMethod,
+    BridgeModeItem,
+    CrossoverBand,
+    CrossoverFilterType,
+    CrossoverSettings,
+    DelaySettings,
+    EqSettings,
+    GeneralSettings,
+    InOutSettings,
+    Limiter,
+    OnOff,
+    OutputGroup,
+    OutputGroupItem,
+    ParametricEqBand,
+    PresetItem,
+    SourceMode,
+    StereoMode,
+    TiltBand,
+    TiltSettings,
+)
 
-__all__ = ["SonanceDSP"]
+__all__ = [
+    "AutoOnMethod",
+    "BridgeModeItem",
+    "CrossoverBand",
+    "CrossoverFilterType",
+    "CrossoverSettings",
+    "DelaySettings",
+    "EqSettings",
+    "GeneralSettings",
+    "InOutSettings",
+    "Limiter",
+    "OnOff",
+    "OutputGroupItem",
+    "OutputGroup",
+    "ParametricEqBand",
+    "PresetItem",
+    "SonanceDSP",
+    "SourceMode",
+    "StereoMode",
+    "TiltBand",
+    "TiltSettings",
+]
