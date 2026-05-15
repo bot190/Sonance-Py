@@ -192,6 +192,19 @@ class InOutSettings:
     gain_offset: list[str]
     mute_volumes: list[OnOff]
 
+    def _output_group_state(self, group: OutputGroup, index: int) -> OutputGroupState:
+        return OutputGroupState(
+            group=group,
+            source_1=self.sources_1[index],
+            source_2=self.sources_2[index],
+            source_mode=self.mode_sources[index],
+            volume=self.output_volumes[index],
+            turn_on_volume=self.turn_on_volumes[index],
+            maximum_volume=self.maximum_volumes[index],
+            gain_offset=self.gain_offset[index],
+            muted=self.mute_volumes[index],
+        )
+
     @property
     def output_channels(self) -> tuple[OutputChannel, ...]:
         """Physical output channels derived from channel-indexed settings."""
@@ -213,19 +226,16 @@ class InOutSettings:
 
     @property
     def output_group_states(self) -> dict[OutputGroup, OutputGroupState]:
-        """Runtime output group states derived from group-indexed settings."""
+        """Runtime output group states derived from output channel slots."""
 
+        channel_indexes_by_group = {
+            channel.output_group: channel.index
+            for channel in reversed(self.output_channels)
+        }
         return {
-            group: OutputGroupState(
-                group=group,
-                source_1=self.sources_1[index],
-                source_2=self.sources_2[index],
-                source_mode=self.mode_sources[index],
-                volume=self.output_volumes[index],
-                turn_on_volume=self.turn_on_volumes[index],
-                maximum_volume=self.maximum_volumes[index],
-                gain_offset=self.gain_offset[index],
-                muted=self.mute_volumes[index],
+            group: self._output_group_state(
+                group,
+                channel_indexes_by_group.get(group, index),
             )
             for index, group in enumerate(OutputGroup)
         }
@@ -235,7 +245,6 @@ class InOutSettings:
         """Logical controllable outputs derived from channel and group state."""
 
         channels = self.output_channels
-        group_states = self.output_group_states
         grouped_channels: dict[OutputGroup, tuple[OutputChannel, ...]] = {}
         consumed_channel_indexes: set[int] = set()
 
@@ -263,7 +272,9 @@ class InOutSettings:
                     number=len(outputs) + 1,
                     channels=output_channels,
                     output_group=group,
-                    group_state=group_states[group],
+                    group_state=self._output_group_state(
+                        group, output_channels[0].index
+                    ),
                     stereo_mode=(
                         StereoMode.STEREO
                         if len(output_channels) == 2

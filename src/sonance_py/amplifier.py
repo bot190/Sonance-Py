@@ -157,9 +157,7 @@ class SonanceOutput:
     async def set_source_mode(self, value: SourceMode) -> InOutSettings:
         """Set the source mixing mode."""
 
-        return await self._amp._write_output_setting(
-            self._state, "mode-source", value
-        )
+        return await self._amp._write_output_setting(self._state, "mode-source", value)
 
     @property
     def volume(self) -> str:
@@ -233,9 +231,7 @@ class SonanceOutput:
     async def set_gain_offset(self, value: str | int | float) -> InOutSettings:
         """Set the output gain offset."""
 
-        return await self._amp._write_output_setting(
-            self._state, "gain-offset", value
-        )
+        return await self._amp._write_output_setting(self._state, "gain-offset", value)
 
     @property
     def muted(self) -> OnOff:
@@ -292,7 +288,7 @@ class SonanceOutput:
         }:
             msg = f"Output group {split_group} is already assigned to an output"
             raise ValueError(msg)
-        await self._amp._copy_group_settings(state.output_group, split_group)
+        await self._amp._copy_group_settings(state, right.index)
         await self._amp.write_in_out("output-group", right.index, split_group)
         await self._amp.write_in_out("stereo-or-mono", left.index, StereoMode.MONO)
         return await self._amp.write_in_out(
@@ -639,28 +635,22 @@ class SonanceDSP:
 
     async def _copy_group_settings(
         self,
-        source_group: OutputGroup,
-        target_group: OutputGroup,
+        source: Output,
+        target_index: int,
     ) -> None:
-        source_state = self.in_out_settings.output_group_states[source_group]
-        await self._write_group_setting(target_group, "source-1", source_state.source_1)
-        await self._write_group_setting(target_group, "source-2", source_state.source_2)
-        await self._write_group_setting(
-            target_group, "mode-source", source_state.source_mode
+        source_state = source.group_state
+        await self.write_in_out("source-1", target_index, source_state.source_1)
+        await self.write_in_out("source-2", target_index, source_state.source_2)
+        await self.write_in_out("mode-source", target_index, source_state.source_mode)
+        await self.write_in_out(
+            "maximum-volume", target_index, source_state.maximum_volume
         )
-        await self._write_group_setting(
-            target_group, "maximum-volume", source_state.maximum_volume
+        await self.write_in_out("output-volume", target_index, source_state.volume)
+        await self.write_in_out(
+            "turn-on-volume", target_index, source_state.turn_on_volume
         )
-        await self._write_group_setting(
-            target_group, "output-volume", source_state.volume
-        )
-        await self._write_group_setting(
-            target_group, "turn-on-volume", source_state.turn_on_volume
-        )
-        await self._write_group_setting(
-            target_group, "gain-offset", source_state.gain_offset
-        )
-        await self._write_group_setting(target_group, "mute-volume", source_state.muted)
+        await self.write_in_out("gain-offset", target_index, source_state.gain_offset)
+        await self.write_in_out("mute-volume", target_index, source_state.muted)
 
     async def _write_group_setting(
         self,

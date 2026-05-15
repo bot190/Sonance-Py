@@ -30,16 +30,6 @@ STRING_VALUE_KEYS = {
     "output-volume",
     "turn-on-volume",
 }
-GROUP_RUNTIME_KEYS = {
-    "gain-offset",
-    "maximum-volume",
-    "mode-source",
-    "mute-volume",
-    "output-volume",
-    "source-1",
-    "source-2",
-    "turn-on-volume",
-}
 
 
 class FakeSonanceDSP(SonanceDSP):
@@ -66,15 +56,7 @@ class FakeSonanceDSP(SonanceDSP):
             value: str | int | float = request["value"]
             if name in STRING_VALUE_KEYS:
                 value = str(value)
-            state_index = index
-            if name in GROUP_RUNTIME_KEYS and index < len(
-                self.in_out_data["output-groups"]
-            ):
-                group = self.in_out_data["output-groups"][index]
-                state_index = self.in_out_data["output-group-items"].index(
-                    {"name": group.upper(), "value": group}
-                )
-            self.in_out_data[IN_OUT_WRITE_KEYS[name]][state_index] = value
+            self.in_out_data[IN_OUT_WRITE_KEYS[name]][index] = value
             return copy.deepcopy(self.in_out_data)
         msg = f"Unexpected request: {request}"
         raise AssertionError(msg)
@@ -307,6 +289,9 @@ class TestSonanceDSPState(unittest.IsolatedAsyncioTestCase):
         self.assertIs(self.amp.outputs[4].output_group, OutputGroup.E)
         self.assertIs(self.amp.outputs[0].stereo_mode, StereoMode.MONO)
         self.assertIs(self.amp.outputs[4].stereo_mode, StereoMode.MONO)
+        self.assertEqual(self.amp.outputs[4].source_1, self.amp.outputs[0].source_1)
+        self.assertEqual(self.amp.outputs[4].source_2, self.amp.outputs[0].source_2)
+        self.assertEqual(self.amp.outputs[4].volume, self.amp.outputs[0].volume)
         self.assertEqual(
             self.amp.requests[-11:],
             [
@@ -314,56 +299,56 @@ class TestSonanceDSPState(unittest.IsolatedAsyncioTestCase):
                     "page": "in-out-settings",
                     "action": "write",
                     "name": "source-1",
-                    "index": 4,
+                    "index": 1,
                     "value": 0,
                 },
                 {
                     "page": "in-out-settings",
                     "action": "write",
                     "name": "source-2",
-                    "index": 4,
+                    "index": 1,
                     "value": 0,
                 },
                 {
                     "page": "in-out-settings",
                     "action": "write",
                     "name": "mode-source",
-                    "index": 4,
+                    "index": 1,
                     "value": SourceMode.OFF,
                 },
                 {
                     "page": "in-out-settings",
                     "action": "write",
                     "name": "maximum-volume",
-                    "index": 4,
+                    "index": 1,
                     "value": "-20",
                 },
                 {
                     "page": "in-out-settings",
                     "action": "write",
                     "name": "output-volume",
-                    "index": 4,
+                    "index": 1,
                     "value": "-60",
                 },
                 {
                     "page": "in-out-settings",
                     "action": "write",
                     "name": "turn-on-volume",
-                    "index": 4,
+                    "index": 1,
                     "value": "-83",
                 },
                 {
                     "page": "in-out-settings",
                     "action": "write",
                     "name": "gain-offset",
-                    "index": 4,
+                    "index": 1,
                     "value": "0",
                 },
                 {
                     "page": "in-out-settings",
                     "action": "write",
                     "name": "mute-volume",
-                    "index": 4,
+                    "index": 1,
                     "value": OnOff.OFF,
                 },
                 {

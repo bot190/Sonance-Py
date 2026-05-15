@@ -61,6 +61,10 @@ class TestInOutSettingsModels(unittest.TestCase):
         self.assertEqual(group_states[OutputGroup.A].maximum_volume, "-20")
         self.assertEqual(group_states[OutputGroup.A].gain_offset, "0")
         self.assertIs(group_states[OutputGroup.A].muted, OnOff.OFF)
+        self.assertIs(group_states[OutputGroup.B].group, OutputGroup.B)
+        self.assertEqual(group_states[OutputGroup.B].source_1, 0)
+        self.assertEqual(group_states[OutputGroup.B].source_2, 2)
+        self.assertEqual(group_states[OutputGroup.B].maximum_volume, "-10")
         self.assertIs(group_states[OutputGroup.C].group, OutputGroup.C)
         self.assertEqual(group_states[OutputGroup.C].volume, "-70")
         self.assertIs(group_states[OutputGroup.C].muted, OnOff.ON)
@@ -80,6 +84,9 @@ class TestInOutSettingsModels(unittest.TestCase):
         self.assertEqual(outputs[3].number, 4)
         self.assertEqual([channel.index for channel in outputs[3].channels], [6, 7])
         self.assertIs(outputs[3].output_group, OutputGroup.D)
+        self.assertEqual(outputs[1].group_state.source_1, 0)
+        self.assertEqual(outputs[1].group_state.source_2, 2)
+        self.assertEqual(outputs[1].group_state.maximum_volume, "-10")
 
     def test_outputs_derives_split_pair_as_fifth_output(self) -> None:
         settings = load_in_out_settings()
