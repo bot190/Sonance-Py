@@ -7,7 +7,7 @@ from typing import Any, Self
 import aiohttp
 
 from ._wire_models import WireEqSettings, WireGeneralSettings, WireInOutSettings
-from .models import EqSettings, GeneralSettings, InOutSettings
+from .models import BasicStatus, EqSettings, GeneralSettings, InOutSettings
 
 JsonObject = dict[str, Any]
 
@@ -59,6 +59,17 @@ class SonanceDSP:
             }
         )
         return WireGeneralSettings.model_validate(data).to_model()
+
+    async def read_basic_status(self) -> BasicStatus:
+        """Read a compact status view containing power and device identity fields."""
+
+        data = await self._request(
+            {
+                "page": "general-settings",
+                "action": "read",
+            }
+        )
+        return WireGeneralSettings.model_validate(data).to_basic_status()
 
     async def write_general(
         self, name: str, value: str | int | float | bool
