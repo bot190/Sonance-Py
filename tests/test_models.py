@@ -65,38 +65,90 @@ class TestInOutSettingsModels(unittest.TestCase):
         self.assertEqual(group_states[OutputGroup.C].volume, "-70")
         self.assertIs(group_states[OutputGroup.C].muted, OnOff.ON)
 
-    def test_stereo_output_pairs(self) -> None:
+    def test_outputs_derives_stereo_pairs(self) -> None:
         settings = load_in_out_settings()
 
-        pairs = settings.stereo_output_pairs
+        outputs = settings.outputs
 
-        self.assertEqual(len(pairs), 4)
-        self.assertEqual(pairs[0].index, 0)
-        self.assertEqual(pairs[0].number, 1)
-        self.assertEqual(pairs[0].left.index, 0)
-        self.assertEqual(pairs[0].right.index, 1)
-        self.assertIs(pairs[0].output_group, OutputGroup.A)
-        self.assertEqual(pairs[3].index, 3)
-        self.assertEqual(pairs[3].number, 4)
-        self.assertEqual(pairs[3].left.index, 6)
-        self.assertEqual(pairs[3].right.index, 7)
-        self.assertIs(pairs[3].output_group, OutputGroup.D)
+        self.assertEqual(len(outputs), 4)
+        self.assertEqual(outputs[0].index, 0)
+        self.assertEqual(outputs[0].number, 1)
+        self.assertEqual([channel.index for channel in outputs[0].channels], [0, 1])
+        self.assertIs(outputs[0].output_group, OutputGroup.A)
+        self.assertIs(outputs[0].stereo_mode, StereoMode.STEREO)
+        self.assertEqual(outputs[3].index, 3)
+        self.assertEqual(outputs[3].number, 4)
+        self.assertEqual([channel.index for channel in outputs[3].channels], [6, 7])
+        self.assertIs(outputs[3].output_group, OutputGroup.D)
 
-    def test_stereo_output_pairs_exclude_channels_with_different_groups(self) -> None:
+    def test_outputs_derives_split_pair_as_fifth_output(self) -> None:
         settings = load_in_out_settings()
         settings = replace(
             settings,
+            stereo_or_mono=[
+                StereoMode.MONO,
+                StereoMode.MONO,
+                *settings.stereo_or_mono[2:],
+            ],
             output_groups=[
                 OutputGroup.A,
-                OutputGroup.B,
+                OutputGroup.E,
                 *settings.output_groups[2:],
             ],
         )
 
-        pairs = settings.stereo_output_pairs
+        outputs = settings.outputs
 
-        self.assertEqual(len(pairs), 3)
-        self.assertNotIn(0, {pair.index for pair in pairs})
+        self.assertEqual(len(outputs), 5)
+        self.assertEqual(
+            [(output.number, output.output_group) for output in outputs],
+            [
+                (1, OutputGroup.A),
+                (2, OutputGroup.B),
+                (3, OutputGroup.C),
+                (4, OutputGroup.D),
+                (5, OutputGroup.E),
+            ],
+        )
+        self.assertEqual([channel.index for channel in outputs[0].channels], [0])
+        self.assertEqual([channel.index for channel in outputs[4].channels], [1])
+        self.assertIs(outputs[0].stereo_mode, StereoMode.MONO)
+        self.assertIs(outputs[4].stereo_mode, StereoMode.MONO)
+
+    def test_outputs_derives_mixed_mono_and_stereo_stably(self) -> None:
+        settings = load_in_out_settings()
+        settings = replace(
+            settings,
+            stereo_or_mono=[
+                *settings.stereo_or_mono[:2],
+                StereoMode.MONO,
+                StereoMode.MONO,
+                *settings.stereo_or_mono[4:],
+            ],
+            output_groups=[
+                *settings.output_groups[:2],
+                OutputGroup.B,
+                OutputGroup.F,
+                *settings.output_groups[4:],
+            ],
+        )
+
+        outputs = settings.outputs
+
+        self.assertEqual(len(outputs), 5)
+        self.assertEqual(
+            [
+                (output.output_group, [channel.index for channel in output.channels])
+                for output in outputs
+            ],
+            [
+                (OutputGroup.A, [0, 1]),
+                (OutputGroup.B, [2]),
+                (OutputGroup.C, [4, 5]),
+                (OutputGroup.D, [6, 7]),
+                (OutputGroup.F, [3]),
+            ],
+        )
 
 
 if __name__ == "__main__":

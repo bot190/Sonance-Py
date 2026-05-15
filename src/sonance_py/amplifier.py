@@ -1,7 +1,9 @@
 """Client for the Sonance DSP amplifier HTTP API."""
 
+from __future__ import annotations
+
 import random
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any, Self
 
 import aiohttp
@@ -13,12 +15,11 @@ from .models import (
     GeneralSettings,
     InOutSettings,
     OnOff,
-    OutputChannel,
+    Output,
     OutputGroup,
     OutputGroupState,
     SourceMode,
     StereoMode,
-    StereoOutputPair,
 )
 
 JsonObject = dict[str, Any]
@@ -45,123 +46,72 @@ def _validate_integer_value(value: int, name: str) -> int:
     return value
 
 
-class SonanceOutputChannel:
-    """Live physical output channel control."""
+class SonanceOutput:
+    """Live logical output control."""
 
-    __slots__ = ("_amp", "_index")
+    __slots__ = ("_amp", "_channel_indexes", "_group", "_index")
 
     def __init__(self, amp: SonanceDSP, index: int) -> None:
         self._amp = amp
+        state = amp.in_out_settings.outputs[index]
         self._index = index
+        self._group = state.output_group
+        self._channel_indexes = tuple(channel.index for channel in state.channels)
 
     @property
-    def _state(self) -> OutputChannel:
-        return self._amp.in_out_settings.output_channels[self._index]
+    def _state(self) -> Output:
+        try:
+            state = self._amp.in_out_settings.outputs[self._index]
+        except IndexError as err:
+            msg = f"Output {self._index} is not available"
+            raise ValueError(msg) from err
+        channel_indexes = tuple(channel.index for channel in state.channels)
+        if (
+            state.output_group is not self._group
+            or channel_indexes != self._channel_indexes
+        ):
+            msg = f"Output {self._index} is stale; refresh output references"
+            raise ValueError(msg)
+        return state
 
     @property
     def index(self) -> int:
-        """Zero-based output channel index."""
+        """Zero-based logical output index."""
 
         return self._state.index
 
     @property
     def number(self) -> int:
-        """User-facing output pair number."""
+        """User-facing output number."""
 
         return self._state.number
 
     @property
-    def side(self) -> str:
-        """Channel side within its pair."""
+    def channel_indexes(self) -> tuple[int, ...]:
+        """Physical channel indexes controlled by this output."""
 
-        return self._state.side
-
-    @property
-    def pair_index(self) -> int:
-        """Zero-based adjacent output pair index."""
-
-        return self._state.pair_index
-
-    @property
-    def name(self) -> str:
-        """Output channel name."""
-
-        return self._state.name
-
-    @property
-    def title(self) -> str:
-        """Output channel title."""
-
-        return self._state.title
-
-    @property
-    def stereo_mode(self) -> StereoMode:
-        """Stereo or mono mode for this output channel."""
-
-        return self._state.stereo_mode
-
-    async def set_stereo_mode(self, value: StereoMode) -> InOutSettings:
-        """Set the stereo or mono mode for this output channel."""
-
-        return await self._amp.write_in_out("stereo-or-mono", self.index, value)
-
-    @property
-    def dsp_preset(self) -> int:
-        """DSP preset assigned to this output channel."""
-
-        return self._state.dsp_preset
-
-    async def set_dsp_preset(self, value: int) -> InOutSettings:
-        """Set the DSP preset assigned to this output channel."""
-
-        return await self._amp.write_in_out("dsp-preset", self.index, value)
+        return self._channel_indexes
 
     @property
     def output_group(self) -> OutputGroup:
-        """Output group assigned to this output channel."""
+        """Output group used for this logical output."""
 
         return self._state.output_group
 
-    async def set_output_group(self, value: OutputGroup) -> InOutSettings:
-        """Set the output group assigned to this output channel."""
+    @property
+    def stereo_mode(self) -> StereoMode:
+        """Stereo or mono mode for this logical output."""
 
-        return await self._amp.write_in_out("output-group", self.index, value)
-
-
-class SonanceOutputGroupState:
-    """Live output group control."""
-
-    __slots__ = ("_amp", "_group")
-
-    def __init__(self, amp: SonanceDSP, group: OutputGroup) -> None:
-        self._amp = amp
-        self._group = group
+        return self._state.stereo_mode
 
     @property
-    def _state(self) -> OutputGroupState:
-        return self._amp.in_out_settings.output_group_states[self._group]
+    def group_state(self) -> OutputGroupState:
+        """Runtime group state for this logical output."""
 
-    @property
-    def _index(self) -> int:
-        return list(OutputGroup).index(self._group)
-
-    @property
-    def _mute_channel_index(self) -> int:
-        for channel in self._amp.in_out_settings.output_channels:
-            if channel.output_group is self._group:
-                return channel.index
-
-        msg = f"No output channel is assigned to output group {self._group}"
-        raise RuntimeError(msg)
-
-    @property
-    def group(self) -> OutputGroup:
-        """Output group identifier."""
-
-        return self._group
+        return self._state.group_state
 
     def source_names(self) -> tuple[str, ...]:
-        """Return source names available to this output group."""
+        """Return source names available to this output."""
 
         return tuple(self._amp.in_out_settings.input_names)
 
@@ -180,43 +130,45 @@ class SonanceOutputGroupState:
     def source_1(self) -> int:
         """Primary input source index."""
 
-        return self._state.source_1
+        return self.group_state.source_1
 
     async def set_source_1(self, value: int) -> InOutSettings:
         """Set the primary input source index."""
 
-        return await self._amp.write_in_out("source-1", self._index, value)
+        return await self._amp._write_output_setting(self._state, "source-1", value)
 
     @property
     def source_2(self) -> int:
         """Secondary input source index."""
 
-        return self._state.source_2
+        return self.group_state.source_2
 
     async def set_source_2(self, value: int) -> InOutSettings:
         """Set the secondary input source index."""
 
-        return await self._amp.write_in_out("source-2", self._index, value)
+        return await self._amp._write_output_setting(self._state, "source-2", value)
 
     @property
     def source_mode(self) -> SourceMode:
         """Source mixing mode."""
 
-        return self._state.source_mode
+        return self.group_state.source_mode
 
     async def set_source_mode(self, value: SourceMode) -> InOutSettings:
         """Set the source mixing mode."""
 
-        return await self._amp.write_in_out("mode-source", self._index, value)
+        return await self._amp._write_output_setting(
+            self._state, "mode-source", value
+        )
 
     @property
     def volume(self) -> str:
-        """Output group volume."""
+        """Output volume."""
 
-        return self._state.volume
+        return self.group_state.volume
 
     async def set_volume(self, value: int) -> InOutSettings:
-        """Set the output group volume."""
+        """Set the output volume."""
 
         volume = _validate_integer_value(value, "Volume")
         maximum_volume = _parse_cached_integer_value(
@@ -228,16 +180,18 @@ class SonanceOutputGroupState:
                 f"{self.maximum_volume}"
             )
             raise ValueError(msg)
-        return await self._amp.write_in_out("output-volume", self._index, value)
+        return await self._amp._write_output_setting(
+            self._state, "output-volume", value
+        )
 
     @property
     def turn_on_volume(self) -> str:
-        """Output group turn-on volume."""
+        """Output turn-on volume."""
 
-        return self._state.turn_on_volume
+        return self.group_state.turn_on_volume
 
     async def set_turn_on_volume(self, value: int) -> InOutSettings:
-        """Set the output group turn-on volume."""
+        """Set the output turn-on volume."""
 
         turn_on_volume = _validate_integer_value(value, "Turn-on volume")
         maximum_volume = _parse_cached_integer_value(
@@ -249,239 +203,106 @@ class SonanceOutputGroupState:
                 f"{self.maximum_volume}"
             )
             raise ValueError(msg)
-        return await self._amp.write_in_out("turn-on-volume", self._index, value)
+        return await self._amp._write_output_setting(
+            self._state, "turn-on-volume", value
+        )
 
     @property
     def maximum_volume(self) -> str:
-        """Output group maximum volume."""
+        """Output maximum volume."""
 
-        return self._state.maximum_volume
+        return self.group_state.maximum_volume
 
     async def set_maximum_volume(self, value: int) -> InOutSettings:
-        """Set the output group maximum volume."""
+        """Set the output maximum volume."""
 
         maximum_volume = _validate_integer_value(value, "Maximum volume")
         if not MIN_VOLUME <= maximum_volume <= MAX_VOLUME:
             msg = "Maximum volume must be between -70 and 12"
             raise ValueError(msg)
-        return await self._amp.write_in_out("maximum-volume", self._index, value)
-
-    @property
-    def gain_offset(self) -> str:
-        """Output group gain offset."""
-
-        return self._state.gain_offset
-
-    async def set_gain_offset(self, value: str | int | float) -> InOutSettings:
-        """Set the output group gain offset."""
-
-        return await self._amp.write_in_out("gain-offset", self._index, value)
-
-    @property
-    def muted(self) -> OnOff:
-        """Output group mute state."""
-
-        return self._state.muted
-
-    async def set_muted(self, value: OnOff | bool) -> InOutSettings:
-        """Set the output group mute state."""
-
-        return await self._amp.write_in_out(
-            "mute-volume", self._mute_channel_index, value
+        return await self._amp._write_output_setting(
+            self._state, "maximum-volume", value
         )
 
-
-class SonanceStereoOutputPair:
-    """Live adjacent stereo output pair control."""
-
-    __slots__ = ("_amp", "_index")
-
-    def __init__(self, amp: SonanceDSP, index: int) -> None:
-        self._amp = amp
-        self._index = index
-
-    @property
-    def _state(self) -> StereoOutputPair:
-        for pair in self._amp.in_out_settings.stereo_output_pairs:
-            if pair.index == self._index:
-                return pair
-        msg = f"Stereo output pair {self._index} is not available"
-        raise RuntimeError(msg)
-
-    @property
-    def index(self) -> int:
-        """Zero-based stereo output pair index."""
-
-        return self._state.index
-
-    @property
-    def number(self) -> int:
-        """User-facing stereo output pair number."""
-
-        return self._state.number
-
-    @property
-    def left(self) -> SonanceOutputChannel:
-        """Left output channel in this pair."""
-
-        return SonanceOutputChannel(self._amp, self._state.left.index)
-
-    @property
-    def right(self) -> SonanceOutputChannel:
-        """Right output channel in this pair."""
-
-        return SonanceOutputChannel(self._amp, self._state.right.index)
-
-    @property
-    def output_group(self) -> OutputGroup:
-        """Shared output group for this pair."""
-
-        return self._state.output_group
-
-    async def set_output_group(self, value: OutputGroup) -> InOutSettings:
-        """Set the shared output group for this pair."""
-
-        state = self._state
-        await self._amp.write_in_out("output-group", state.left.index, value)
-        return await self._amp.write_in_out("output-group", state.right.index, value)
-
-    @property
-    def dsp_preset(self) -> int:
-        """DSP preset assigned to both channels in this pair."""
-
-        state = self._state
-        if state.left.dsp_preset != state.right.dsp_preset:
-            msg = f"Stereo output pair {self._index} has mixed DSP presets"
-            raise RuntimeError(msg)
-        return state.left.dsp_preset
-
-    async def set_dsp_preset(self, value: int) -> InOutSettings:
-        """Set the DSP preset assigned to both channels in this pair."""
-
-        state = self._state
-        await self._amp.write_in_out("dsp-preset", state.left.index, value)
-        return await self._amp.write_in_out("dsp-preset", state.right.index, value)
-
-    @property
-    def stereo_mode(self) -> StereoMode:
-        """Stereo or mono mode assigned to both channels in this pair."""
-
-        state = self._state
-        if state.left.stereo_mode != state.right.stereo_mode:
-            msg = f"Stereo output pair {self._index} has mixed stereo modes"
-            raise RuntimeError(msg)
-        return state.left.stereo_mode
-
-    async def set_stereo_mode(self, value: StereoMode) -> InOutSettings:
-        """Set the stereo or mono mode assigned to both channels in this pair."""
-
-        state = self._state
-        await self._amp.write_in_out("stereo-or-mono", state.left.index, value)
-        return await self._amp.write_in_out("stereo-or-mono", state.right.index, value)
-
-    @property
-    def group_state(self) -> SonanceOutputGroupState:
-        """Live shared output group state for this pair."""
-
-        return SonanceOutputGroupState(self._amp, self.output_group)
-
-    @property
-    def source_1(self) -> int:
-        """Shared primary input source index."""
-
-        return self.group_state.source_1
-
-    def source_names(self) -> tuple[str, ...]:
-        """Return source names available to this pair."""
-
-        return self.group_state.source_names()
-
-    async def set_source_1(self, value: int) -> InOutSettings:
-        """Set the shared primary input source index."""
-
-        return await self.group_state.set_source_1(value)
-
-    async def set_source_by_name(self, name: str) -> InOutSettings:
-        """Set the shared primary input source by source name."""
-
-        return await self.group_state.set_source_by_name(name)
-
-    @property
-    def source_2(self) -> int:
-        """Shared secondary input source index."""
-
-        return self.group_state.source_2
-
-    async def set_source_2(self, value: int) -> InOutSettings:
-        """Set the shared secondary input source index."""
-
-        return await self.group_state.set_source_2(value)
-
-    @property
-    def source_mode(self) -> SourceMode:
-        """Shared source mixing mode."""
-
-        return self.group_state.source_mode
-
-    async def set_source_mode(self, value: SourceMode) -> InOutSettings:
-        """Set the shared source mixing mode."""
-
-        return await self.group_state.set_source_mode(value)
-
-    @property
-    def volume(self) -> str:
-        """Shared output group volume."""
-
-        return self.group_state.volume
-
-    async def set_volume(self, value: int) -> InOutSettings:
-        """Set the shared output group volume."""
-
-        return await self.group_state.set_volume(value)
-
-    @property
-    def muted(self) -> OnOff:
-        """Shared output group mute state."""
-
-        return self.group_state.muted
-
-    async def set_muted(self, value: OnOff | bool) -> InOutSettings:
-        """Set the shared output group mute state."""
-
-        return await self.group_state.set_muted(value)
-
-    @property
-    def turn_on_volume(self) -> str:
-        """Shared output group turn-on volume."""
-
-        return self.group_state.turn_on_volume
-
-    async def set_turn_on_volume(self, value: int) -> InOutSettings:
-        """Set the shared output group turn-on volume."""
-
-        return await self.group_state.set_turn_on_volume(value)
-
-    @property
-    def maximum_volume(self) -> str:
-        """Shared output group maximum volume."""
-
-        return self.group_state.maximum_volume
-
-    async def set_maximum_volume(self, value: int) -> InOutSettings:
-        """Set the shared output group maximum volume."""
-
-        return await self.group_state.set_maximum_volume(value)
-
     @property
     def gain_offset(self) -> str:
-        """Shared output group gain offset."""
+        """Output gain offset."""
 
         return self.group_state.gain_offset
 
     async def set_gain_offset(self, value: str | int | float) -> InOutSettings:
-        """Set the shared output group gain offset."""
+        """Set the output gain offset."""
 
-        return await self.group_state.set_gain_offset(value)
+        return await self._amp._write_output_setting(
+            self._state, "gain-offset", value
+        )
+
+    @property
+    def muted(self) -> OnOff:
+        """Output mute state."""
+
+        return self.group_state.muted
+
+    async def set_muted(self, value: OnOff | bool) -> InOutSettings:
+        """Set the output mute state."""
+
+        return await self._amp._write_output_setting(self._state, "mute-volume", value)
+
+    @property
+    def dsp_preset(self) -> int:
+        """DSP preset assigned to every channel in this output."""
+
+        state = self._state
+        dsp_presets = {channel.dsp_preset for channel in state.channels}
+        if len(dsp_presets) != 1:
+            msg = f"Output {self._index} has mixed DSP presets"
+            raise RuntimeError(msg)
+        return state.channels[0].dsp_preset
+
+    async def set_dsp_preset(self, value: int) -> InOutSettings:
+        """Set the DSP preset assigned to every channel in this output."""
+
+        state = self._state
+        for channel in state.channels[:-1]:
+            await self._amp.write_in_out("dsp-preset", channel.index, value)
+        return await self._amp.write_in_out(
+            "dsp-preset", state.channels[-1].index, value
+        )
+
+    async def set_stereo_mode(self, value: StereoMode) -> InOutSettings:
+        """Set this output's stereo or mono mode when the transition is valid."""
+
+        state = self._state
+        if value is state.stereo_mode:
+            return self._amp.in_out_settings
+        if value is StereoMode.STEREO:
+            msg = "Use join() to form a stereo output from two mono outputs"
+            raise ValueError(msg)
+
+        if len(state.channels) != 2:
+            channel = state.channels[0]
+            return await self._amp.write_in_out(
+                "stereo-or-mono", channel.index, StereoMode.MONO
+            )
+
+        left, right = state.channels
+        split_group = self._amp._split_group_for(state.output_group)
+        if split_group in {
+            output.output_group for output in self._amp.in_out_settings.outputs
+        }:
+            msg = f"Output group {split_group} is already assigned to an output"
+            raise ValueError(msg)
+        await self._amp._copy_group_settings(state.output_group, split_group)
+        await self._amp.write_in_out("output-group", right.index, split_group)
+        await self._amp.write_in_out("stereo-or-mono", left.index, StereoMode.MONO)
+        return await self._amp.write_in_out(
+            "stereo-or-mono", right.index, StereoMode.MONO
+        )
+
+    async def join(self, members: Iterable[SonanceOutput]) -> InOutSettings:
+        """Join member outputs to this output."""
+
+        return await self._amp.join_outputs(self, members)
 
 
 class SonanceDSP:
@@ -552,30 +373,11 @@ class SonanceDSP:
         return self._eq_settings
 
     @property
-    def output_channels(self) -> tuple[SonanceOutputChannel, ...]:
-        """Live physical output channel controls."""
+    def outputs(self) -> tuple[SonanceOutput, ...]:
+        """Live logical output controls."""
 
         return tuple(
-            SonanceOutputChannel(self, channel.index)
-            for channel in self.in_out_settings.output_channels
-        )
-
-    @property
-    def output_group_states(self) -> dict[OutputGroup, SonanceOutputGroupState]:
-        """Live output group controls."""
-
-        return {
-            group: SonanceOutputGroupState(self, group)
-            for group in self.in_out_settings.output_group_states
-        }
-
-    @property
-    def stereo_output_pairs(self) -> tuple[SonanceStereoOutputPair, ...]:
-        """Live stereo output pair controls."""
-
-        return tuple(
-            SonanceStereoOutputPair(self, pair.index)
-            for pair in self.in_out_settings.stereo_output_pairs
+            SonanceOutput(self, output.index) for output in self.in_out_settings.outputs
         )
 
     async def refresh(self) -> None:
@@ -654,6 +456,34 @@ class SonanceDSP:
         )
         self._in_out_settings = WireInOutSettings.model_validate(data).to_model()
         return self._in_out_settings
+
+    async def join_outputs(
+        self,
+        target: SonanceOutput,
+        members: Iterable[SonanceOutput],
+    ) -> InOutSettings:
+        """Join member outputs to the target output."""
+
+        target_state = target._state
+        member_states = tuple(member._state for member in members)
+        if not member_states:
+            return self.in_out_settings
+
+        seen_groups = {target_state.output_group}
+        for member_state in member_states:
+            if member_state.output_group in seen_groups:
+                msg = "Cannot join an output to itself"
+                raise ValueError(msg)
+            seen_groups.add(member_state.output_group)
+
+        if len(member_states) == 1 and self._can_form_stereo_pair(
+            target_state, member_states[0]
+        ):
+            return await self._join_as_stereo_pair(target_state, member_states[0])
+
+        for member_state in member_states:
+            await self._copy_output_input_settings(target_state, member_state)
+        return self.in_out_settings
 
     async def read_eq(self, preset: int = 0) -> EqSettings:
         """Read an EQ preset state."""
@@ -760,6 +590,107 @@ class SonanceDSP:
         )
         self._eq_settings = WireEqSettings.model_validate(data).to_model()
         return self._eq_settings
+
+    async def _join_as_stereo_pair(
+        self,
+        target: Output,
+        member: Output,
+    ) -> InOutSettings:
+        target_channel = target.channels[0]
+        member_channel = member.channels[0]
+        left, right = sorted(
+            (target_channel, member_channel), key=lambda channel: channel.index
+        )
+
+        await self.write_in_out("stereo-or-mono", left.index, StereoMode.STEREO)
+        await self.write_in_out("stereo-or-mono", right.index, StereoMode.STEREO)
+        if left.output_group is not target.output_group:
+            await self.write_in_out("output-group", left.index, target.output_group)
+        if right.output_group is not target.output_group:
+            return await self.write_in_out(
+                "output-group", right.index, target.output_group
+            )
+        return self.in_out_settings
+
+    @staticmethod
+    def _can_form_stereo_pair(target: Output, member: Output) -> bool:
+        if len(target.channels) != 1 or len(member.channels) != 1:
+            return False
+        target_channel = target.channels[0]
+        member_channel = member.channels[0]
+        return (
+            target_channel.pair_index == member_channel.pair_index
+            and target_channel.index != member_channel.index
+            and target_channel.stereo_mode is StereoMode.MONO
+            and member_channel.stereo_mode is StereoMode.MONO
+        )
+
+    async def _copy_output_input_settings(
+        self,
+        source: Output,
+        target: Output,
+    ) -> None:
+        source_state = source.group_state
+        await self._write_output_setting(target, "source-1", source_state.source_1)
+        await self._write_output_setting(target, "source-2", source_state.source_2)
+        await self._write_output_setting(
+            target, "mode-source", source_state.source_mode
+        )
+
+    async def _copy_group_settings(
+        self,
+        source_group: OutputGroup,
+        target_group: OutputGroup,
+    ) -> None:
+        source_state = self.in_out_settings.output_group_states[source_group]
+        await self._write_group_setting(target_group, "source-1", source_state.source_1)
+        await self._write_group_setting(target_group, "source-2", source_state.source_2)
+        await self._write_group_setting(
+            target_group, "mode-source", source_state.source_mode
+        )
+        await self._write_group_setting(
+            target_group, "maximum-volume", source_state.maximum_volume
+        )
+        await self._write_group_setting(
+            target_group, "output-volume", source_state.volume
+        )
+        await self._write_group_setting(
+            target_group, "turn-on-volume", source_state.turn_on_volume
+        )
+        await self._write_group_setting(
+            target_group, "gain-offset", source_state.gain_offset
+        )
+        await self._write_group_setting(target_group, "mute-volume", source_state.muted)
+
+    async def _write_group_setting(
+        self,
+        group: OutputGroup,
+        name: str,
+        value: str | int | float | bool,
+    ) -> InOutSettings:
+        return await self.write_in_out(name, self._group_index(group), value)
+
+    async def _write_output_setting(
+        self,
+        output: Output,
+        name: str,
+        value: str | int | float | bool,
+    ) -> InOutSettings:
+        return await self.write_in_out(name, output.channels[0].index, value)
+
+    @staticmethod
+    def _group_index(group: OutputGroup) -> int:
+        return list(OutputGroup).index(group)
+
+    @classmethod
+    def _split_group_for(cls, group: OutputGroup) -> OutputGroup:
+        split_index = cls._group_index(group) + 4
+        groups = list(OutputGroup)
+        try:
+            return groups[split_index]
+        except IndexError as err:
+            msg = f"Output group {group} cannot be split to a +4 mono group"
+            raise ValueError(msg) from err
 
     async def _request(self, params: Mapping[str, str | int | float]) -> JsonObject:
         session = await self._get_session()

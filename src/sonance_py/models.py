@@ -156,14 +156,15 @@ class OutputGroupState:
 
 
 @dataclass(frozen=True, slots=True)
-class StereoOutputPair:
-    """Adjacent stereo channels sharing the same output group."""
+class Output:
+    """Logical controllable amplifier output."""
 
     index: int
     number: int
-    left: OutputChannel
-    right: OutputChannel
+    channels: tuple[OutputChannel, ...]
     output_group: OutputGroup
+    group_state: OutputGroupState
+    stereo_mode: StereoMode
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,25 +231,47 @@ class InOutSettings:
         }
 
     @property
-    def stereo_output_pairs(self) -> tuple[StereoOutputPair, ...]:
-        """Adjacent stereo channel pairs that share an output group."""
+    def outputs(self) -> tuple[Output, ...]:
+        """Logical controllable outputs derived from channel and group state."""
 
         channels = self.output_channels
-        return tuple(
-            StereoOutputPair(
-                index=left.pair_index,
-                number=left.number,
-                left=left,
-                right=right,
-                output_group=left.output_group,
-            )
-            for left, right in zip(channels[::2], channels[1::2], strict=False)
+        group_states = self.output_group_states
+        grouped_channels: dict[OutputGroup, tuple[OutputChannel, ...]] = {}
+        consumed_channel_indexes: set[int] = set()
+
+        for left, right in zip(channels[::2], channels[1::2], strict=False):
             if (
                 left.stereo_mode is StereoMode.STEREO
                 and right.stereo_mode is StereoMode.STEREO
                 and left.output_group is right.output_group
+            ):
+                grouped_channels[left.output_group] = (left, right)
+                consumed_channel_indexes.update({left.index, right.index})
+
+        for channel in channels:
+            if channel.index not in consumed_channel_indexes:
+                grouped_channels[channel.output_group] = (channel,)
+
+        outputs: list[Output] = []
+        for group in OutputGroup:
+            output_channels = grouped_channels.get(group)
+            if output_channels is None:
+                continue
+            outputs.append(
+                Output(
+                    index=len(outputs),
+                    number=len(outputs) + 1,
+                    channels=output_channels,
+                    output_group=group,
+                    group_state=group_states[group],
+                    stereo_mode=(
+                        StereoMode.STEREO
+                        if len(output_channels) == 2
+                        else StereoMode.MONO
+                    ),
+                )
             )
-        )
+        return tuple(outputs)
 
 
 @dataclass(frozen=True, slots=True)

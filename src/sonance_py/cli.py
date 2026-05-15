@@ -1,4 +1,4 @@
-"""Typer CLI for Sonance DSP status and group control."""
+"""Typer CLI for Sonance DSP status and output control."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ from typing import Any
 
 import typer
 
-from .amplifier import SonanceDSP
-from .models import OnOff, OutputGroup
+from .amplifier import SonanceDSP, SonanceOutput
+from .models import OnOff
 
 app = typer.Typer(help="Control and inspect Sonance DSP amplifiers.")
-group_app = typer.Typer(help="Group status and controls.")
-app.add_typer(group_app, name="group")
+output_app = typer.Typer(help="Output status and controls.")
+app.add_typer(output_app, name="output")
 
 
 class CliContext:
@@ -48,6 +48,14 @@ def _print_dataclass(model: Any) -> None:
         typer.echo(f"{key}: {value}")
 
 
+def _find_output_by_number(amp: SonanceDSP, number: int) -> SonanceOutput:
+    for output in amp.outputs:
+        if output.number == number:
+            return output
+    msg = f"No output {number}; available outputs: 1-{len(amp.outputs)}"
+    raise typer.BadParameter(msg)
+
+
 @app.command("status")
 def status_command(ctx: typer.Context) -> None:
     """Show high-level amplifier status."""
@@ -61,16 +69,20 @@ def status_command(ctx: typer.Context) -> None:
     asyncio.run(_run())
 
 
-@group_app.command("status")
-def group_status_command(ctx: typer.Context, group: OutputGroup) -> None:
-    """Show status for one output group."""
+@output_app.command("status")
+def output_status_command(ctx: typer.Context, output_number: int) -> None:
+    """Show status for one logical output."""
 
     async def _run() -> None:
         context = _get_ctx(ctx)
         async with SonanceDSP(context.hostname) as amp:
             await amp.read_in_out()
-            current_state = amp.output_group_states[group]
-            typer.echo(f"group: {current_state.group}")
+            output = _find_output_by_number(amp, output_number)
+            current_state = output.group_state
+            typer.echo(f"output: {output.number}")
+            typer.echo(f"channels: {output.channel_indexes}")
+            typer.echo(f"stereo_mode: {output.stereo_mode}")
+            typer.echo(f"group: {output.output_group}")
             typer.echo(f"source_1: {current_state.source_1}")
             typer.echo(f"source_2: {current_state.source_2}")
             typer.echo(f"source_mode: {current_state.source_mode}")
@@ -83,49 +95,69 @@ def group_status_command(ctx: typer.Context, group: OutputGroup) -> None:
     asyncio.run(_run())
 
 
-@group_app.command("mute")
-def group_mute_command(ctx: typer.Context, group: OutputGroup) -> None:
-    """Mute an output group."""
+@output_app.command("list")
+def output_list_command(ctx: typer.Context) -> None:
+    """List available logical outputs."""
 
     async def _run() -> None:
         context = _get_ctx(ctx)
         async with SonanceDSP(context.hostname) as amp:
             await amp.read_in_out()
-            updated = await amp.output_group_states[group].set_muted(OnOff.ON)
-            typer.echo(
-                f"group {group} muted={updated.output_group_states[group].muted}"
-            )
+            for output in amp.outputs:
+                typer.echo(
+                    f"output {output.number}: "
+                    f"channels={output.channel_indexes} "
+                    f"stereo_mode={output.stereo_mode} "
+                    f"group={output.output_group}"
+                )
 
     asyncio.run(_run())
 
 
-@group_app.command("unmute")
-def group_unmute_command(ctx: typer.Context, group: OutputGroup) -> None:
-    """Unmute an output group."""
+@output_app.command("mute")
+def output_mute_command(ctx: typer.Context, output_number: int) -> None:
+    """Mute a logical output."""
 
     async def _run() -> None:
         context = _get_ctx(ctx)
         async with SonanceDSP(context.hostname) as amp:
             await amp.read_in_out()
-            updated = await amp.output_group_states[group].set_muted(OnOff.OFF)
-            typer.echo(
-                f"group {group} muted={updated.output_group_states[group].muted}"
-            )
+            output = _find_output_by_number(amp, output_number)
+            await output.set_muted(OnOff.ON)
+            typer.echo(f"output {output.number} muted={output.muted}")
 
     asyncio.run(_run())
 
 
-@group_app.command("volume")
-def group_volume_command(ctx: typer.Context, group: OutputGroup, value: int) -> None:
-    """Set output-group volume in dB."""
+@output_app.command("unmute")
+def output_unmute_command(ctx: typer.Context, output_number: int) -> None:
+    """Unmute a logical output."""
 
     async def _run() -> None:
         context = _get_ctx(ctx)
         async with SonanceDSP(context.hostname) as amp:
             await amp.read_in_out()
-            updated = await amp.output_group_states[group].set_volume(value)
-            typer.echo(
-                f"group {group} volume={updated.output_group_states[group].volume}"
-            )
+            output = _find_output_by_number(amp, output_number)
+            await output.set_muted(OnOff.OFF)
+            typer.echo(f"output {output.number} muted={output.muted}")
+
+    asyncio.run(_run())
+
+
+@output_app.command("volume")
+def output_volume_command(
+    ctx: typer.Context,
+    output_number: int,
+    value: int,
+) -> None:
+    """Set logical output volume in dB."""
+
+    async def _run() -> None:
+        context = _get_ctx(ctx)
+        async with SonanceDSP(context.hostname) as amp:
+            await amp.read_in_out()
+            output = _find_output_by_number(amp, output_number)
+            await output.set_volume(value)
+            typer.echo(f"output {output.number} volume={output.volume}")
 
     asyncio.run(_run())
