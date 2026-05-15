@@ -56,7 +56,14 @@ class FakeSonanceDSP(SonanceDSP):
             value: str | int | float = request["value"]
             if name in STRING_VALUE_KEYS:
                 value = str(value)
-            self.in_out_data[IN_OUT_WRITE_KEYS[name]][index] = value
+            if name == "mute-volume":
+                group = self.in_out_data["output-groups"][index]
+                group_index = self.in_out_data["output-group-items"].index(
+                    {"name": group.upper(), "value": group}
+                )
+                self.in_out_data[IN_OUT_WRITE_KEYS[name]][group_index] = value
+            else:
+                self.in_out_data[IN_OUT_WRITE_KEYS[name]][index] = value
             return copy.deepcopy(self.in_out_data)
         msg = f"Unexpected request: {request}"
         raise AssertionError(msg)
@@ -138,6 +145,49 @@ class TestSonanceDSPState(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(group_state.volume, "12")
         self.assertEqual(group_state.turn_on_volume, "12")
         self.assertIs(group_state.muted, OnOff.ON)
+
+    async def test_output_group_mute_writes_channel_index_for_the_group(self) -> None:
+        group_state = self.amp.output_group_states[OutputGroup.B]
+
+        await group_state.set_muted(OnOff.OFF)
+
+        self.assertIs(group_state.muted, OnOff.OFF)
+        self.assertEqual(
+            self.amp.requests[-1],
+            {
+                "page": "in-out-settings",
+                "action": "write",
+                "name": "mute-volume",
+                "index": 2,
+                "value": OnOff.OFF,
+            },
+        )
+
+    async def test_output_group_volume_writes_group_index_integer_value(self) -> None:
+        group_state = self.amp.output_group_states[OutputGroup.A]
+
+        await group_state.set_volume(-50)
+
+        self.assertEqual(group_state.volume, "-50")
+        self.assertEqual(
+            self.amp.requests[-1],
+            {
+                "page": "in-out-settings",
+                "action": "write",
+                "name": "output-volume",
+                "index": 0,
+                "value": -50,
+            },
+        )
+
+    async def test_output_group_rejects_non_integer_volume_values(self) -> None:
+        group_state = self.amp.output_group_states[OutputGroup.A]
+
+        with self.assertRaisesRegex(TypeError, "Volume must be an integer"):
+            await group_state.set_volume(-50.0)  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(TypeError, "Volume must be an integer"):
+            await group_state.set_volume("-50")  # type: ignore[arg-type]
 
     async def test_output_group_rejects_invalid_maximum_volume(self) -> None:
         group_state = self.amp.output_group_states[OutputGroup.A]
@@ -232,7 +282,7 @@ class TestSonanceDSPState(unittest.IsolatedAsyncioTestCase):
         await pair.set_dsp_preset(3)
         await pair.set_source_1(2)
         await pair.set_source_mode(SourceMode.MIX)
-        await pair.set_volume("-30")
+        await pair.set_volume(-30)
         await pair.set_muted(OnOff.ON)
 
         self.assertEqual(pair.left.dsp_preset, 3)

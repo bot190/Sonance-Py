@@ -22,18 +22,27 @@ from .models import (
 )
 
 JsonObject = dict[str, Any]
-MIN_VOLUME = -70.0
-MAX_VOLUME = 12.0
+MIN_VOLUME = -70
+MAX_VOLUME = 12
 
 
-def _parse_numeric_value(value: str | int | float, name: str) -> float:
-    """Parse a numeric setting value for validation."""
+def _parse_cached_integer_value(value: str, name: str) -> int:
+    """Parse an integer setting value from cached amplifier state."""
 
     try:
-        return float(value)
+        return int(value)
     except ValueError as err:
-        msg = f"{name} must be a number"
+        msg = f"{name} must be an integer"
         raise ValueError(msg) from err
+
+
+def _validate_integer_value(value: int, name: str) -> int:
+    """Validate an integer volume setting before sending it to the amplifier."""
+
+    if isinstance(value, bool) or not isinstance(value, int):
+        msg = f"{name} must be an integer"
+        raise TypeError(msg)
+    return value
 
 
 class SonanceOutputChannel:
@@ -137,6 +146,15 @@ class SonanceOutputGroupState:
         return list(OutputGroup).index(self._group)
 
     @property
+    def _mute_channel_index(self) -> int:
+        for channel in self._amp.in_out_settings.output_channels:
+            if channel.output_group is self._group:
+                return channel.index
+
+        msg = f"No output channel is assigned to output group {self._group}"
+        raise RuntimeError(msg)
+
+    @property
     def group(self) -> OutputGroup:
         """Output group identifier."""
 
@@ -197,11 +215,13 @@ class SonanceOutputGroupState:
 
         return self._state.volume
 
-    async def set_volume(self, value: str | int | float) -> InOutSettings:
+    async def set_volume(self, value: int) -> InOutSettings:
         """Set the output group volume."""
 
-        volume = _parse_numeric_value(value, "Volume")
-        maximum_volume = _parse_numeric_value(self.maximum_volume, "Maximum volume")
+        volume = _validate_integer_value(value, "Volume")
+        maximum_volume = _parse_cached_integer_value(
+            self.maximum_volume, "Maximum volume"
+        )
         if not MIN_VOLUME <= volume <= maximum_volume:
             msg = (
                 f"Volume must be between -70 and the current maximum volume "
@@ -216,11 +236,13 @@ class SonanceOutputGroupState:
 
         return self._state.turn_on_volume
 
-    async def set_turn_on_volume(self, value: str | int | float) -> InOutSettings:
+    async def set_turn_on_volume(self, value: int) -> InOutSettings:
         """Set the output group turn-on volume."""
 
-        turn_on_volume = _parse_numeric_value(value, "Turn-on volume")
-        maximum_volume = _parse_numeric_value(self.maximum_volume, "Maximum volume")
+        turn_on_volume = _validate_integer_value(value, "Turn-on volume")
+        maximum_volume = _parse_cached_integer_value(
+            self.maximum_volume, "Maximum volume"
+        )
         if not MIN_VOLUME <= turn_on_volume <= maximum_volume:
             msg = (
                 f"Turn-on volume must be between -70 and the current maximum volume "
@@ -235,10 +257,10 @@ class SonanceOutputGroupState:
 
         return self._state.maximum_volume
 
-    async def set_maximum_volume(self, value: str | int | float) -> InOutSettings:
+    async def set_maximum_volume(self, value: int) -> InOutSettings:
         """Set the output group maximum volume."""
 
-        maximum_volume = _parse_numeric_value(value, "Maximum volume")
+        maximum_volume = _validate_integer_value(value, "Maximum volume")
         if not MIN_VOLUME <= maximum_volume <= MAX_VOLUME:
             msg = "Maximum volume must be between -70 and 12"
             raise ValueError(msg)
@@ -264,7 +286,9 @@ class SonanceOutputGroupState:
     async def set_muted(self, value: OnOff | bool) -> InOutSettings:
         """Set the output group mute state."""
 
-        return await self._amp.write_in_out("mute-volume", self._index, value)
+        return await self._amp.write_in_out(
+            "mute-volume", self._mute_channel_index, value
+        )
 
 
 class SonanceStereoOutputPair:
@@ -410,7 +434,7 @@ class SonanceStereoOutputPair:
 
         return self.group_state.volume
 
-    async def set_volume(self, value: str | int | float) -> InOutSettings:
+    async def set_volume(self, value: int) -> InOutSettings:
         """Set the shared output group volume."""
 
         return await self.group_state.set_volume(value)
@@ -432,7 +456,7 @@ class SonanceStereoOutputPair:
 
         return self.group_state.turn_on_volume
 
-    async def set_turn_on_volume(self, value: str | int | float) -> InOutSettings:
+    async def set_turn_on_volume(self, value: int) -> InOutSettings:
         """Set the shared output group turn-on volume."""
 
         return await self.group_state.set_turn_on_volume(value)
@@ -443,7 +467,7 @@ class SonanceStereoOutputPair:
 
         return self.group_state.maximum_volume
 
-    async def set_maximum_volume(self, value: str | int | float) -> InOutSettings:
+    async def set_maximum_volume(self, value: int) -> InOutSettings:
         """Set the shared output group maximum volume."""
 
         return await self.group_state.set_maximum_volume(value)
