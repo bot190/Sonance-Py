@@ -98,8 +98,6 @@ class GeneralSettings:
     serial_number: str
 
 
-
-
 @dataclass(frozen=True, slots=True)
 class BasicStatus:
     """Basic amplifier status fields for quick health/state checks."""

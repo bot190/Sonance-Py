@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .models import (
     AutoOnMethod,
+    BasicStatus,
     BridgeModeItem,
     CrossoverBand,
     CrossoverFilterType,
@@ -62,6 +63,16 @@ class WireGeneralSettings(SonanceWireModel):
     installition_date: str = Field(alias="installition-date")
     firmware_version: str = Field(alias="firmware-version")
     serial_number: str = Field(alias="serial-number")
+
+    def to_basic_status(self) -> BasicStatus:
+        """Convert the wire payload to a compact public status dataclass."""
+
+        return BasicStatus(
+            power=self.power,
+            firmware_version=self.firmware_version,
+            amplifier_name=self.amplifier_name,
+            serial_number=self.serial_number,
+        )
 
     def to_model(self) -> GeneralSettings:
         """Convert the wire payload to a public dataclass."""

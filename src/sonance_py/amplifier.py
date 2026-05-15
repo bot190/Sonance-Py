@@ -63,13 +63,13 @@ class SonanceDSP:
     async def read_basic_status(self) -> BasicStatus:
         """Read a compact status view containing power and device identity fields."""
 
-        general = await self.read_general()
-        return BasicStatus(
-            power=general.power,
-            firmware_version=general.firmware_version,
-            amplifier_name=general.amplifier_name,
-            serial_number=general.serial_number,
+        data = await self._request(
+            {
+                "page": "general-settings",
+                "action": "read",
+            }
         )
+        return WireGeneralSettings.model_validate(data).to_basic_status()
 
     async def write_general(
         self, name: str, value: str | int | float | bool
