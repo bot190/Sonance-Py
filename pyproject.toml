@@ -10,6 +10,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pyright>=1.1.400",
     "ruff>=0.14.0",
 ]
 
@@ -29,3 +30,9 @@ select = [
     "I",
     "UP",
 ]
+
+
+[tool.pyright]
+include = ["src", "main.py"]
+pythonVersion = "3.14"
+typeCheckingMode = "standard"
