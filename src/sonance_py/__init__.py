@@ -3,6 +3,7 @@
 from .amplifier import SonanceDSP
 from .models import (
     AutoOnMethod,
+    BasicStatus,
     BridgeModeItem,
     CrossoverBand,
     CrossoverFilterType,
@@ -25,6 +26,7 @@ from .models import (
 
 __all__ = [
     "AutoOnMethod",
+    "BasicStatus",
     "BridgeModeItem",
     "CrossoverBand",
     "CrossoverFilterType",

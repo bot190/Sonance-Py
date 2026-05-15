@@ -98,6 +98,18 @@ class GeneralSettings:
     serial_number: str
 
 
+
+
+@dataclass(frozen=True, slots=True)
+class BasicStatus:
+    """Basic amplifier status fields for quick health/state checks."""
+
+    power: OnOff
+    firmware_version: str
+    amplifier_name: str
+    serial_number: str
+
+
 @dataclass(frozen=True, slots=True)
 class OutputGroupItem:
     """Output group option returned by the input/output settings endpoint."""
