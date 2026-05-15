@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 
 class OnOff(StrEnum):
@@ -125,6 +126,47 @@ class BridgeModeItem:
 
 
 @dataclass(frozen=True, slots=True)
+class OutputChannel:
+    """Physical amplifier output channel configuration."""
+
+    index: int
+    number: int
+    side: Literal["left", "right"]
+    pair_index: int
+    name: str
+    title: str
+    stereo_mode: StereoMode
+    dsp_preset: int
+    output_group: OutputGroup
+
+
+@dataclass(frozen=True, slots=True)
+class OutputGroupState:
+    """Runtime state controlled through an output group."""
+
+    group: OutputGroup
+    source_1: int
+    source_2: int
+    source_mode: SourceMode
+    volume: str
+    turn_on_volume: str
+    maximum_volume: str
+    gain_offset: str
+    muted: OnOff
+
+
+@dataclass(frozen=True, slots=True)
+class StereoOutputPair:
+    """Adjacent stereo channels sharing the same output group."""
+
+    index: int
+    number: int
+    left: OutputChannel
+    right: OutputChannel
+    output_group: OutputGroup
+
+
+@dataclass(frozen=True, slots=True)
 class InOutSettings:
     """Input/output settings state returned by the amplifier."""
 
@@ -148,6 +190,65 @@ class InOutSettings:
     maximum_volumes: list[str]
     gain_offset: list[str]
     mute_volumes: list[OnOff]
+
+    @property
+    def output_channels(self) -> tuple[OutputChannel, ...]:
+        """Physical output channels derived from channel-indexed settings."""
+
+        return tuple(
+            OutputChannel(
+                index=index,
+                number=(index // 2) + 1,
+                side="left" if index % 2 == 0 else "right",
+                pair_index=index // 2,
+                name=name,
+                title=self.output_titles[index],
+                stereo_mode=self.stereo_or_mono[index],
+                dsp_preset=self.dsp_presets[index],
+                output_group=self.output_groups[index],
+            )
+            for index, name in enumerate(self.output_names)
+        )
+
+    @property
+    def output_group_states(self) -> dict[OutputGroup, OutputGroupState]:
+        """Runtime output group states derived from group-indexed settings."""
+
+        return {
+            group: OutputGroupState(
+                group=group,
+                source_1=self.sources_1[index],
+                source_2=self.sources_2[index],
+                source_mode=self.mode_sources[index],
+                volume=self.output_volumes[index],
+                turn_on_volume=self.turn_on_volumes[index],
+                maximum_volume=self.maximum_volumes[index],
+                gain_offset=self.gain_offset[index],
+                muted=self.mute_volumes[index],
+            )
+            for index, group in enumerate(OutputGroup)
+        }
+
+    @property
+    def stereo_output_pairs(self) -> tuple[StereoOutputPair, ...]:
+        """Adjacent stereo channel pairs that share an output group."""
+
+        channels = self.output_channels
+        return tuple(
+            StereoOutputPair(
+                index=left.pair_index,
+                number=left.number,
+                left=left,
+                right=right,
+                output_group=left.output_group,
+            )
+            for left, right in zip(channels[::2], channels[1::2], strict=False)
+            if (
+                left.stereo_mode is StereoMode.STEREO
+                and right.stereo_mode is StereoMode.STEREO
+                and left.output_group is right.output_group
+            )
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,6 +1,11 @@
 """Async client for Sonance DSP amplifiers."""
 
-from .amplifier import SonanceDSP
+from .amplifier import (
+    SonanceDSP,
+    SonanceOutputChannel,
+    SonanceOutputGroupState,
+    SonanceStereoOutputPair,
+)
 from .models import (
     AutoOnMethod,
     BasicStatus,
@@ -14,12 +19,15 @@ from .models import (
     InOutSettings,
     Limiter,
     OnOff,
+    OutputChannel,
     OutputGroup,
     OutputGroupItem,
+    OutputGroupState,
     ParametricEqBand,
     PresetItem,
     SourceMode,
     StereoMode,
+    StereoOutputPair,
     TiltBand,
     TiltSettings,
 )
@@ -37,13 +45,19 @@ __all__ = [
     "InOutSettings",
     "Limiter",
     "OnOff",
+    "OutputChannel",
     "OutputGroupItem",
     "OutputGroup",
+    "OutputGroupState",
     "ParametricEqBand",
     "PresetItem",
     "SonanceDSP",
+    "SonanceOutputChannel",
+    "SonanceOutputGroupState",
+    "SonanceStereoOutputPair",
     "SourceMode",
     "StereoMode",
+    "StereoOutputPair",
     "TiltBand",
     "TiltSettings",
 ]
